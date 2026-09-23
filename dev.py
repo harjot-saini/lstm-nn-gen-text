@@ -2,6 +2,7 @@ import random
 import numpy as np
 import keras
 from keras import layers
+    
 
 filepath = keras.utils.get_file('shakespeare.txt',
                                 'https://storage.googleapis.com/download.tensorflow.org/data/shakespeare.txt')
