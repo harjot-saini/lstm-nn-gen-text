@@ -1,124 +1,88 @@
 # neural-networks-gen-text
 
-Recurrent neural networks are very useful when it comes to processing sequential data like text. This project uses an LSTM (Long Short-Term Memory) network to teach a computer to write text in the style of Shakespeare, learning character by character rather than word by word.
-
-The model is trained on a 500,000-character slice of Shakespeare's collected works and generates new text one character at a time, with adjustable "temperature" to control how creative or conservative the output is.
+A character-level text generator built with an LSTM in Keras. Trains on Shakespeare's collected works and generates new Shakespeare-style text at several sampling temperatures, from conservative and repetitive (low temperature) to creative and chaotic (high temperature).
 
 ## How It Works
 
-The model doesn't understand words or grammar. It learns statistical patterns between characters by looking at 40-character windows of text and predicting what character comes next. Given enough training, it picks up on spelling, common words, punctuation patterns, and even loose sentence structure, purely from character sequences.
-
-Generation is autoregressive: the model predicts one character, appends it to the input, drops the oldest character, and repeats. A temperature parameter reshapes the prediction probabilities before sampling, letting you trade off between safe, repetitive text and more varied, riskier text.
-
-## Features
-
-- Downloads and caches the Shakespeare corpus automatically on first run
-- Character-level one-hot encoding pipeline built from scratch with NumPy
-- Single-layer LSTM model trained with Keras
-- Temperature-based sampling function for controllable text generation
-- Generates sample text at seven temperature levels (0.2 to 1.0) for side-by-side comparison
+1. Downloads and lowercases the [Tiny Shakespeare corpus](https://storage.googleapis.com/download.tensorflow.org/data/shakespeare.txt) (a 500k-character slice is used by default to keep training fast)
+2. Slides a window across the text to build `(40-character sequence → next character)` training pairs
+3. One-hot encodes sequences and trains a single-layer LSTM (128 units) with a softmax output over the character vocabulary
+4. Generates new text autoregressively: predict the next character, sample it, append it, slide the window forward, repeat
+5. Repeats generation at multiple temperatures so you can compare how sampling randomness affects output quality
 
 ## Requirements
 
-```
-python >= 3.8
-tensorflow / keras
-numpy
-```
-
-Install dependencies:
+- Python 3.9+
+- [Keras](https://keras.io/) 3 with a backend (TensorFlow is the default and simplest choice)
+- NumPy
 
 ```bash
-pip install tensorflow numpy
+pip install keras tensorflow numpy
 ```
 
 ## Usage
 
-Run the script directly:
-
+Train and generate with default settings:
 ```bash
-python shakespeare_generator.py
+python model.py
 ```
 
-On first run, it will:
+This trains for 4 epochs on 40-character sequences, then generates 300-character samples at temperatures `0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0`, printing them to the console and saving them to `output.txt`.
 
-1. Download `shakespeare.txt` from Google's TensorFlow storage bucket
-2. Preprocess the text and build character-to-index mappings
-3. Build training sequences using a sliding window
-4. Train an LSTM for 4 epochs
-5. Generate and print 300-character samples at temperatures `0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0`
+### Useful flags
 
-## Model Architecture
-
-| Layer | Output Shape | Details |
+| Flag | Default | Meaning |
 |---|---|---|
-| Input | `(40, vocab_size)` | One-hot encoded character sequence |
-| LSTM | `(128,)` | 128 hidden units |
-| Dense | `(vocab_size,)` | Softmax over all characters |
+| `--seq-length` | `40` | Input sequence length (characters) |
+| `--step-size` | `3` | Stride between training sequences |
+| `--epochs` | `4` | Training epochs |
+| `--batch-size` | `256` | Training batch size |
+| `--learning-rate` | `0.01` | RMSprop learning rate |
+| `--gen-length` | `300` | Characters generated per sample |
+| `--temperatures` | `0.2 0.3 0.4 0.5 0.6 0.8 1.0` | Sampling temperatures to showcase |
+| `--save-model` | `None` | Path to save the trained model (e.g. `model.keras`) |
+| `--load-model` | `None` | Path to load a previously saved model instead of training |
+| `--skip-training` | `False` | Skip training (pair with `--load-model`) |
+| `--output-file` | `output.txt` | Where generated samples are written (`""` to skip saving) |
 
-**Training configuration:**
+Full option list:
+```bash
+python model.py --help
+```
 
-| Parameter | Value |
-|---|---|
-| Sequence length | 40 characters |
-| Step size | 3 characters |
-| Batch size | 256 |
-| Epochs | 4 |
-| Optimizer | RMSprop (lr = 0.01) |
-| Loss | Categorical crossentropy |
+### Examples
+
+Quick smoke test:
+```bash
+python model.py --epochs 1 --gen-length 100
+```
+
+Train, save the model, and reuse it later without retraining:
+```bash
+python model.py --save-model model.keras
+python model.py --load-model model.keras --skip-training
+```
+
+Sample at just a couple of temperatures:
+```bash
+python model.py --temperatures 0.4 0.8
+```
 
 ## Understanding Temperature
 
-The `sample()` function reshapes the softmax output before drawing a character:
+Temperature controls how "risky" the model's character choices are:
+- **Low (0.2–0.4)** — mostly picks the highest-probability character; output is repetitive but grammatically safer
+- **Medium (0.5–0.6)** — a balance of coherence and variety
+- **High (0.8–1.0)** — more randomness and novel word-like patterns, at the cost of coherence
 
-| Temperature | Behavior |
-|---|---|
-| 0.2 – 0.4 | Conservative, repetitive, closer to the most likely next character |
-| 0.5 – 0.6 | Balanced mix of coherence and variety |
-| 0.8 – 1.0 | More random and creative, higher chance of gibberish |
+Sample output from a full run is saved to `output.txt` after each execution.
 
-Lower values sharpen the probability distribution toward the model's top prediction. Higher values flatten it, giving less likely characters a better shot at being picked.
+## Notes
 
-## Example Output
+- The script uses `keras.utils.get_file`, which caches the corpus locally after the first download — subsequent runs won't re-download it.
+- All one-hot tensors use `float32` rather than `bool` to avoid deprecation warnings on newer NumPy versions.
+- Sampling includes a small epsilon inside the `log()` call to avoid `-inf` errors when a predicted probability is exactly 0.
 
-Output quality depends heavily on training time. With only 4 epochs, expect rough, partially-formed English rather than fully coherent Shakespeare:
+## License
 
-```
-------------0.2------------
-the king, and the strange the more the strong the state
-the strength of the state and the strange the more the...
-
-------------1.0------------
-wor'd svle, ay honou-t, wich? shall dremp and pxow's br...
-```
-
-## Saving and Loading the Model
-
-Model saving is included but commented out by default:
-
-```python
-model.save('m.h5')
-model = keras.models.load_model('my_model.h5')
-```
-
-Uncomment these lines to persist the trained model and skip retraining on future runs. Note that `.h5` is Keras's legacy format; newer Keras versions recommend the `.keras` extension instead.
-
-## Known Limitations
-
-- **Slow generation**: each character requires a separate `model.predict()` call, so generating long passages at multiple temperatures can take a while.
-- **Short training run**: 4 epochs is enough to see the model start learning structure, but not enough for fully fluent output. Increase epochs for better results.
-- **Manual one-hot encoding**: works fine for a small character vocabulary, but doesn't scale to word-level vocabularies or very long sequences. An `Embedding` layer would be a natural upgrade.
-- **Fixed corpus slice**: only characters 300,000–800,000 of the source file are used, skipping the license header and trimming dataset size for faster iteration.
-
-## Ideas for Extending This Project
-
-- Replace the one-hot input with a trainable `Embedding` layer
-- Stack additional LSTM or GRU layers, or add dropout for regularization
-- Train for more epochs and track loss over time
-- Swap the character-level LSTM for a small transformer for higher-quality generation
-- Add a CLI or simple web interface for interactive generation with adjustable temperature and length
-
-## Credits
-
-Trained on the Shakespeare dataset hosted by TensorFlow at:
-`https://storage.googleapis.com/download.tensorflow.org/data/shakespeare.txt`
+See [LICENSE](LICENSE) if present in this repository, otherwise treat as unlicensed / all rights reserved by the author.
